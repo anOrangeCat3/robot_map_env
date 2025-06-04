@@ -1,6 +1,6 @@
 import numpy as np
 
-LIDAR_RANGE = 10
+LIDAR_RANGE = 80
 LIDAR_ANGLE_STEP = 0.5 / 180 * np.pi  # 0.5度的角度增量
 
 class Lidar:
@@ -20,28 +20,69 @@ class Lidar:
         self.angel_step = LIDAR_ANGLE_STEP
 
     def scan(self,
-             robot_position:np.ndarray,):
+             robot_position:np.ndarray,
+             robot_belief_map:np.ndarray,
+             ground_truth:np.ndarray):
         '''
         以机器人坐标为中心, 扫描一圈
-
-        返回一个雷达扫描最外围坐标的集合
         '''
         x0 = robot_position[0]
         y0 = robot_position[1]
-
         angle = 0
-        explored_region = set()
         while angle < 2 * np.pi:
             x1 = x0+np.cos(angle)*self.lidar_range
             y1 = y0+np.sin(angle)*self.lidar_range
 
-            x1=x1.round()
-            y1=y1.round()
-
-            explored_region.add((x1,y1))
-
+            robot_belief_map=self.boundary_check(x0,y0,x1,y1,ground_truth,robot_belief_map)
             angle += self.angel_step
         
-        return explored_region
+        return robot_belief_map
+    
+    def boundary_check(self,
+                       x0:np.ndarray, 
+                       y0:np.ndarray, 
+                       x1:np.ndarray, 
+                       y1:np.ndarray, 
+                       ground_truth:np.ndarray, 
+                       robot_belief_map:np.ndarray)->np.ndarray:
+        """ Checks if line is blocked by obstacle """
+        x0 = x0.round()
+        y0 = y0.round()
+        x1 = x1.round()
+        y1 = y1.round()
+        dx, dy = abs(x1 - x0), abs(y1 - y0)
+        x, y = x0, y0
+        error = dx - dy
+        x_inc = 1 if x1 > x0 else -1
+        y_inc = 1 if y1 > y0 else -1
+        dx *= 2
+        dy *= 2
+
+        collision_flag = 0
+        max_collision = 10
+
+        while 0 <= x < ground_truth.shape[1] and 0 <= y < ground_truth.shape[0]:
+            k = ground_truth.item(y, x)
+            if k == 1 and collision_flag < max_collision:
+                collision_flag += 1
+                if collision_flag >= max_collision:
+                    break
+
+            if k !=1 and collision_flag > 0:
+                break
+
+            if x == x1 and y == y1:
+                break
+
+            robot_belief_map.itemset((y, x), k)
+
+            if error > 0:
+                x += x_inc
+                error -= dy
+            else:
+                y += y_inc
+                error += dx
+
+        return robot_belief_map
 
 
