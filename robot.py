@@ -3,7 +3,7 @@ from typing import Tuple
 
 from sensor import Lidar
 
-
+UPDATE_FREQUENCY = 10
 class Robot:
     '''
     Robot类
@@ -36,7 +36,8 @@ class Robot:
         '''
         self.position = None
         self.belief_map = None
-        self.lidar = Lidar()        
+        self.lidar = Lidar()   
+        self.odom = np.zeros((0,2))   
 
     def reset(self,
               robot_start_position:np.ndarray,
@@ -56,18 +57,55 @@ class Robot:
         belief_map: np.ndarray
             机器人自己的地图
         '''
-        # 初始化机器人位置和自己的地图
-        self.position = robot_start_position
-        self.belief_map=np.ones_like(global_map) * 127
-        # self.local_map = np.zeros(global_map.shape)
+        
+        self.position = robot_start_position  # 初始化机器人位置
+        self.belief_map=np.ones_like(global_map) * 127  # 初始化机器人自己的地图
+        self.odom = np.zeros((0,2))  # 初始化odom
 
         # 更新机器人自己的地图
         self.belief_map = self.update_belief_map(global_map)
 
         return self.belief_map
     
+    def step_move(self,
+             move_direction:str,
+             global_map:np.ndarray
+             )->np.ndarray:
+        '''
+        移动机器人, 仅移动一步
+
+        参数:
+        move_direction: str
+            移动方向
+
+        global_map: np.ndarray
+            全局地图
+
+        返回:
+        belief_map: np.ndarray
+            机器人自己认知的地图
+        '''
+        if move_direction == 'left':
+            move_vector = np.array([-1,0])
+            # self.position[0] -= 1    
+        elif move_direction == 'right':
+            move_vector = np.array([1,0])
+            # self.position[0] += 1
+        elif move_direction == 'down':
+            move_vector = np.array([0,-1])
+            # self.position[1] -= 1
+        elif move_direction == 'up':
+            move_vector = np.array([0,1])
+            # self.position[1] += 1
+
+        self.position += move_vector
+        self.odom = np.vstack((self.odom,move_vector))
+
+        return self.update_belief_map(global_map)
+    
     def update_belief_map(self,
-                         global_map:np.ndarray
+                         global_map:np.ndarray,
+                         update_frequency:int=UPDATE_FREQUENCY
                          )->np.ndarray:
         '''
         更新机器人自己的地图
@@ -80,7 +118,8 @@ class Robot:
         belief_map: np.ndarray
             机器人自己认知的地图
         '''
-        self.belief_map=self.lidar.scan(self.position,self.belief_map,global_map)
+        if len(self.odom) % update_frequency == 0:
+            self.belief_map=self.lidar.scan(self.position,self.belief_map,global_map)
         
         return self.belief_map
     
